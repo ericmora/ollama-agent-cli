@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 import { streamChat, clearHistory } from './lib/ollama.js';
+import { getSettings, saveSettings } from './lib/settings.js';
 import axios from 'axios';
 import readline from 'readline';
 import { readFile } from 'fs/promises';
@@ -56,6 +57,8 @@ program.action(async (prompt, options) => {
     const yes = options.yes;
     const yesAll = options.yesAll;
 
+    let settings = await getSettings();
+
     if (options.interactive && !prompt) {
         console.log(`${colors.yellow}Starting interactive Ollama chat. Type /bye or /exit to quit. Press ESC to cancel a command.${colors.reset}`);
         const rl = readline.createInterface({
@@ -90,8 +93,49 @@ program.action(async (prompt, options) => {
                 console.log(`  ${colors.green}/bye${colors.reset} or ${colors.green}/exit${colors.reset} - Exit the interactive chat.`);
                 console.log(`  ${colors.green}/clear${colors.reset} - Clear the conversation history.`);
                 console.log(`  ${colors.green}/models${colors.reset} - List and select an Ollama model.`);
+                console.log(`  ${colors.green}/settings${colors.reset} - Configure agent settings.`);
                 console.log(`  ${colors.green}/help${colors.reset} - Display this help message.`);
                 rl.prompt();
+                return;
+            }
+            if (trimmedLine === '/settings') {
+                console.log(`${colors.cyan}Current Settings:${colors.reset}`);
+                console.log(`  Language: ${settings.language}`);
+                console.log(`  Show Thinking: ${settings.showThinking ? 'Yes' : 'No'}`);
+
+                rl.question(`${colors.green}Enter setting to change (language, showThinking) or press Enter to exit: ${colors.reset}`, async (settingToChange) => {
+                    settingToChange = settingToChange.trim().toLowerCase();
+                    if (settingToChange === 'language') {
+                        rl.question(`${colors.green}Enter new language (en, es): ${colors.reset}`, async (newLang) => {
+                            newLang = newLang.trim().toLowerCase();
+                            if (['en', 'es'].includes(newLang)) {
+                                settings.language = newLang;
+                                await saveSettings(settings);
+                                console.log(`${colors.yellow}Language updated to: ${newLang}.${colors.reset}`);
+                            } else {
+                                console.log(`${colors.red}Invalid language. Please use 'en' or 'es'.${colors.reset}`);
+                            }
+                            rl.prompt();
+                        });
+                    } else if (settingToChange === 'showthinking') {
+                        rl.question(`${colors.green}Show thinking fragments? (yes/no): ${colors.reset}`, async (newVal) => {
+                            newVal = newVal.trim().toLowerCase();
+                            if (['yes', 'no'].includes(newVal)) {
+                                settings.showThinking = newVal === 'yes';
+                                await saveSettings(settings);
+                                console.log(`${colors.yellow}Show Thinking updated to: ${settings.showThinking ? 'Yes' : 'No'}.${colors.reset}`);
+                            } else {
+                                console.log(`${colors.red}Invalid input. Please use 'yes' or 'no'.${colors.reset}`);
+                            }
+                            rl.prompt();
+                        });
+                    } else if (settingToChange === '') {
+                        rl.prompt();
+                    } else {
+                        console.log(`${colors.red}Invalid setting. Please choose 'language' or 'showThinking'.${colors.reset}`);
+                        rl.prompt();
+                    }
+                });
                 return;
             }
             if (trimmedLine === '/models') {
@@ -139,7 +183,7 @@ Using model: ${model}`);
                 console.log(`Connecting to host: ${host}`);
                 console.log(`Prompt: ${trimmedLine}`);
             }
-            await streamChat(trimmedLine, model, host, debug, yes, yesAll, rl, controller.signal);
+            await streamChat(trimmedLine, model, host, debug, yes, yesAll, rl, controller.signal, settings);
             rl.prompt();
         });
 
@@ -165,7 +209,7 @@ Using model: ${model}`);
             console.log(`Connecting to host: ${host}`);
             console.log(`Prompt: ${prompt}`);
         }
-        await streamChat(prompt, model, host, debug, yes, yesAll);
+        await streamChat(prompt, model, host, debug, yes, yesAll, null, null, settings);
     } else {
         program.help();
     }
