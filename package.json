@@ -16,12 +16,20 @@
     "agent",
     "ai"
   ],
-  "author": "",
+  "author": "Eric Mora",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.7.2",
     "blessed": "^0.1.81",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5"
-  }
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "logo.txt",
+    "package.json",
+    "README.md",
+    ".env.example"
+  ]
 }

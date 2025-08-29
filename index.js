@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import dotenv from 'dotenv';
 import { streamChat, clearHistory } from './lib/ollama.js';
+import axios from 'axios';
 import readline from 'readline';
 import { readFile } from 'fs/promises';
 import path from 'path';
@@ -49,7 +50,7 @@ program.option('--yes', 'Automatically approve the next command', false);
 program.option('--yes-all', 'Automatically approve all commands', false);
 
 program.action(async (prompt, options) => {
-    const model = options.model;
+    let model = options.model;
     const host = options.host;
     const debug = options.debug;
     const yes = options.yes;
@@ -82,6 +83,50 @@ program.action(async (prompt, options) => {
                 clearHistory();
                 console.log(`${colors.yellow}Conversation history cleared.${colors.reset}`);
                 rl.prompt();
+                return;
+            }
+            if (trimmedLine === '/help') {
+                console.log(`${colors.cyan}Available commands:${colors.reset}`);
+                console.log(`  ${colors.green}/bye${colors.reset} or ${colors.green}/exit${colors.reset} - Exit the interactive chat.`);
+                console.log(`  ${colors.green}/clear${colors.reset} - Clear the conversation history.`);
+                console.log(`  ${colors.green}/models${colors.reset} - List and select an Ollama model.`);
+                console.log(`  ${colors.green}/help${colors.reset} - Display this help message.`);
+                rl.prompt();
+                return;
+            }
+            if (trimmedLine === '/models') {
+                try {
+                    const modelsUrl = `${host}/api/tags`;
+                    const response = await axios.get(modelsUrl);
+                    const models = response.data.models;
+
+                    if (models.length === 0) {
+                        console.log(`${colors.yellow}No models found on your Ollama server.${colors.reset}`);
+                        rl.prompt();
+                        return;
+                    }
+
+                    console.log(`${colors.cyan}Available models:${colors.reset}`);
+                    models.forEach((m, index) => {
+                        const isCurrent = m.name === model;
+                        console.log(`  ${index + 1}. ${m.name}${isCurrent ? ' (current)' : ''}`);
+                    });
+
+                    rl.question(`${colors.green}Enter the number of the model you want to use: ${colors.reset}`, async (answer) => {
+                        const selectedIndex = parseInt(answer) - 1;
+                        if (selectedIndex >= 0 && selectedIndex < models.length) {
+                            model = models[selectedIndex].name; // Update the model variable
+                            clearHistory(); // Clear history when model changes
+                            console.log(`${colors.yellow}Model changed to: ${model}. Conversation history cleared.${colors.reset}`);
+                        } else {
+                            console.log(`${colors.red}Invalid model selection.${colors.reset}`);
+                        }
+                        rl.prompt();
+                    });
+                } catch (error) {
+                    console.error(`${colors.red}Error fetching models: ${error.message}${colors.reset}`);
+                    rl.prompt();
+                }
                 return;
             }
             if (trimmedLine === '') {
