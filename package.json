@@ -17,7 +17,7 @@
     "agent",
     "ai"
   ],
-  "author": "Eric Mora",
+  "author": "Eric Mora <ericmora82@gmail.com> (https://www.linkedin.com/in/ericmora/)",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.7.2",
