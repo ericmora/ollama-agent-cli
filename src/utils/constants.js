@@ -44,7 +44,11 @@ Your responses must be in the user's specified language: ${language}.
         -   To **modify a file**, provide the exact content to be replaced in '---OLD---' and the new content in '---NEW---'.
 
 3.  **File Reading:**
-    -   To read a file, use the special command 'read_file_direct <file_path>'.
+    -   **Format:** To read a file, use the 'READ_FILE_DIRECT' block.
+        <explanation of the file read>
+        @@READ_FILE_DIRECT@@
+        <file_path>
+        @@READ_FILE_DIRECT@@
 
 **RESPONSE FLOW:**
 -   **If you issue a command or file modification:** Respond ONLY with the formats specified above.
