@@ -1,8 +1,24 @@
 import { Command } from 'commander';
+import axios from 'axios';
 import { handleChat } from './commands/chat.js';
 import { startInteractiveSession } from './commands/interactive.js';
 import { displayLogo } from './utils/display.js';
 import { getSettings } from './services/settings.js';
+import { colors } from './utils/constants.js';
+
+async function displayStartupMessage(host, model) {
+    try {
+        const response = await axios.get(`${host}/api/tags`);
+        const models = response.data.models;
+        const modelCount = models.length;
+        console.log(`${colors.green}Connected to Ollama! Using model: ${colors.yellow}${model}${colors.green}.`);
+        if (modelCount > 0) {
+            console.log(`${colors.green}Found ${modelCount} model(s). In interactive mode, type ${colors.yellow}/models${colors.green} to switch.${colors.reset}`);
+        }
+    } catch (error) {
+        console.log(`${colors.red}Warning: Could not connect to Ollama at ${host}. Please ensure Ollama is running.${colors.reset}`);
+    }
+}
 
 export async function run() {
     await displayLogo();
@@ -25,6 +41,7 @@ export async function run() {
 
     program.action(async (prompt, options) => {
         const { model, host, debug, yes, yesAll } = options;
+        await displayStartupMessage(host, model);
         const settings = await getSettings();
 
         if (options.interactive && !prompt) {

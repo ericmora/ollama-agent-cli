@@ -8,7 +8,7 @@ export async function startInteractiveSession(model, host, debug, yes, yesAll) {
     let settings = await getSettings();
     let currentModel = model;
 
-    console.log(`${colors.yellow}Starting interactive Ollama chat. Type /bye or /exit to quit. Press ESC to cancel a command.${colors.reset}`);
+    console.log(`${colors.yellow}Starting interactive Ollama chat. Type /bye or /exit to quit or /help for commands. Press ESC to cancel a command.${colors.reset}`);
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,

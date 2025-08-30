@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "A CLI agent to interact with a local Ollama server.",
   "type": "module",
-  "main": "index.js",
+  "main": "src/cli.js",
   "bin": {
-    "ollama-agent": "./index.js"
+    "ollama-agent": "bin/ollama-agent"
   },
   "scripts": {
     "test": "echo 'Error: no test specified' && exit 1",
@@ -23,6 +23,7 @@
     "axios": "^1.7.2",
     "blessed": "^0.1.81",
     "commander": "^12.1.0",
+    "diff": "^8.0.2",
     "dotenv": "^16.4.5"
   },
   "files": [
@@ -30,9 +31,6 @@
     "src/",
     "logo.txt",
     "README.md",
-    ".env.example"
-  ]
-}ME.md",
     ".env.example"
   ]
 }

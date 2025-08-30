@@ -4,20 +4,11 @@ import readline from 'readline';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { colors } from '../utils/constants.js';
+import { renderResponse, displayDiff } from '../utils/display.js';
 
 const execPromise = util.promisify(exec);
 const APPROVALS_FILE = path.join(os.homedir(), '.ollama-agent-approvals.json');
-
-const colors = {
-    reset: "\x1b[0m",
-    bold: "\x1b[1m",
-    red: "\x1b[31m",
-    green: "\x1b[32m",
-    yellow: "\x1b[33m",
-    blue: "\x1b[34m",
-    magenta: "\x1b[35m",
-    cyan: "\x1b[36m",
-};
 
 async function readApprovals() {
     try {
@@ -44,14 +35,14 @@ function getCommandRoot(command) {
     return command.split(' ')[0];
 }
 
-async function confirmAction(command, actionDescription, fullCommand, yes, yesAll, rl) {
+
+async function confirmAction(command, actionDescription, fullCommand, yes, yesAll, rl, settings) {
     const commandRoot = getCommandRoot(command);
 
     if (commandRoot === 'echo') {
         return true;
     }
 
-    // Auto-approve read_file_direct if the file is in the current working directory
     if (commandRoot === 'read_file_direct') {
         const filePath = fullCommand.replace('read_file_direct ', '');
         const currentDir = process.cwd();
@@ -59,7 +50,7 @@ async function confirmAction(command, actionDescription, fullCommand, yes, yesAl
         const relativePath = path.relative(currentDir, resolvedPath);
 
         if (!relativePath.startsWith('..') && relativePath !== '') {
-            return true; // Auto-approve
+            return true;
         }
     }
 
@@ -82,8 +73,9 @@ async function confirmAction(command, actionDescription, fullCommand, yes, yesAl
     });
 
     return new Promise((resolve) => {
+        const renderedExplanation = renderResponse(actionDescription, settings);
         console.log(`
-${colors.cyan}${actionDescription}${colors.reset}
+${renderedExplanation}
 `);
         console.log(`Command: ${colors.yellow}${colors.bold}${fullCommand}${colors.reset}`);
         localRl.question('Approve action? (y)es / (n)o / (a)lways: ', async (answer) => {
@@ -104,21 +96,82 @@ ${colors.cyan}${actionDescription}${colors.reset}
     });
 }
 
-async function replace(filePath, oldString, newString) {
+async function replaceFileContents(filePath, oldContent, newContent) {
     try {
-        const data = await fs.readFile(filePath, 'utf8');
-        if (!data.includes(oldString)) {
-            return JSON.stringify({ error: `Old string not found in ${filePath}` });
+        const originalContent = await fs.readFile(filePath, 'utf8');
+        if (oldContent && !originalContent.includes(oldContent)) {
+            return JSON.stringify({ error: `Old content not found in ${filePath}. Cannot perform replacement.` });
         }
-        const result = data.replace(oldString, newString);
-        await fs.writeFile(filePath, result, 'utf8');
-        return JSON.stringify({ success: true, oldString, newString, message: `Replaced string in ${filePath}` });
+        const updatedContent = oldContent ? originalContent.replace(oldContent, newContent) : newContent;
+        await fs.writeFile(filePath, updatedContent, 'utf8');
+        return JSON.stringify({ success: true, message: `File ${filePath} has been updated.` });
+    } catch (error) {
+        if (error.code === 'ENOENT' && !oldContent) {
+            // File doesn't exist, and we are creating it (oldContent is empty)
+            try {
+                await fs.writeFile(filePath, newContent, 'utf8');
+                return JSON.stringify({ success: true, message: `File ${filePath} has been created.` });
+            } catch (writeError) {
+                return JSON.stringify({ error: writeError.message });
+            }
+        }
+        return JSON.stringify({ error: error.message });
+    }
+}
+
+async function confirmFileAction(filePath, oldContent, newContent, explanation, yes, yesAll, rl, settings) {
+    if (yesAll || yes) {
+        return true;
+    }
+
+    const approvals = await readApprovals();
+    if (approvals[filePath] === 'always') {
+        return true;
+    }
+
+    const localRl = rl || readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    return new Promise((resolve) => {
+        const renderedExplanation = renderResponse(explanation, settings);
+        console.log(`
+${renderedExplanation}
+`);
+        displayDiff(filePath, oldContent, newContent);
+        
+        localRl.question('Approve file modification? (y)es / (n)o / (a)lways: ', async (answer) => {
+            if (!rl) {
+                localRl.close();
+            }
+            const lowerAnswer = answer.toLowerCase();
+            if (lowerAnswer === 'y' || lowerAnswer === 'yes') {
+                resolve(true);
+            } else if (lowerAnswer === 'a' || lowerAnswer === 'always') {
+                approvals[filePath] = 'always';
+                await writeApprovals(approvals);
+                resolve(true);
+            } else {
+                resolve(false);
+            }
+        });
+    });
+}
+
+export async function handleFileReplacement(filePath, oldContent, newContent, explanation, yes, yesAll, rl, signal, settings) {
+    try {
+        const approved = await confirmFileAction(filePath, oldContent, newContent, explanation, yes, yesAll, rl, settings);
+        if (!approved) {
+            throw new Error('Operation cancelled by user.');
+        }
+        return await replaceFileContents(filePath, oldContent, newContent);
     } catch (error) {
         return JSON.stringify({ error: error.message });
     }
 }
 
-async function readFileDirect(filePath) {
+export async function readFileDirect(filePath) {
     try {
         const data = await fs.readFile(filePath, 'utf8');
         return JSON.stringify({ stdout: data });
@@ -127,19 +180,14 @@ async function readFileDirect(filePath) {
     }
 }
 
-export async function executeCommand(command, args = [], explanation = '', yes = false, yesAll = false, rl = null, signal = null) {
+export async function executeCommand(command, args = [], explanation = '', yes = false, yesAll = false, rl = null, signal = null, settings = null) {
     const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}`.trim() : command;
     const actionDescription = explanation || `I will execute the following command:`
 
-    const approved = await confirmAction(command, actionDescription, fullCommand, yes, yesAll, rl);
+    const approved = await confirmAction(command, actionDescription, fullCommand, yes, yesAll, rl, settings);
 
     if (!approved) {
         throw new Error('Operation cancelled by user.');
-    }
-
-    if (command === 'replace') {
-        const [filePath, oldString, newString] = args;
-        return await replace(filePath, oldString, newString);
     }
 
     if (command === 'read_file_direct') {
@@ -147,26 +195,28 @@ export async function executeCommand(command, args = [], explanation = '', yes =
         return await readFileDirect(filePath);
     }
 
-    process.stdout.write(`${colors.yellow}Executing: ${fullCommand}${colors.reset}`);
     const spinner = ['|', '/', '-', '\\'];
     let i = 0;
+    const executingMessage = `${colors.yellow}Executing: ${fullCommand}${colors.reset}`;
+    
     const interval = setInterval(() => {
-        process.stdout.write(`\r${colors.yellow}${spinner[i++]}${colors.reset}`);
+        process.stdout.write(`\r${executingMessage} ${spinner[i++]}`);
         i %= spinner.length;
     }, 100);
 
     try {
         const { stdout, stderr } = await execPromise(`bash -c "${fullCommand}"`, { signal });
         clearInterval(interval);
-        process.stdout.write('\r' + ' '.repeat(1) + '\r');
+        process.stdout.write('\r' + ' '.repeat(executingMessage.length + 2) + '\r');
         return JSON.stringify({ stdout, stderr }, null, 2);
     } catch (error) {
         clearInterval(interval);
-        process.stdout.write('\r' + ' '.repeat(1) + '\r');
+        process.stdout.write('\r' + ' '.repeat(executingMessage.length + 2) + '\r');
         if (error.name === 'AbortError') {
             return JSON.stringify({ error: 'Command was cancelled by user.' });
         }
-        console.error(`\n${colors.red}Error executing command: ${error}${colors.reset}`);
+        console.error(`
+${colors.red}Error executing command: ${error}${colors.reset}`);
         return JSON.stringify({ error: error.message, stdout: error.stdout, stderr: error.stderr }, null, 2);
     }
 }
