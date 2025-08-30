@@ -1,43 +1,8 @@
-import axios from 'axios';
-import { executeCommand } from './tools.js';
+import { executeCommand } from '../services/tools.js';
+import { sendChat } from '../services/ollama.js';
+import { colors, SYSTEM_PROMPT } from '../utils/constants.js';
 
-const colors = {
-    reset: "\x1b[0m",
-    blue: "\x1b[34m",
-    red: "\x1b[31m",
-    yellow: "\x1b[33m",
-    gray: "\x1b[90m", // New color for <think> tags
-};
-
-const SYSTEM_PROMPT = (language) => `You are a command-line agent running on ${process.platform}. Your goal is to assist the user.
-
-Your responses should be in ${language} language.
-
-When you need to execute a command, you must respond in the following format and nothing else. Replace <explanation> with your explanation and <the command> with the actual command.
-
-Example:
-This command will list all files and directories.
-@@COMMAND@@
-ls -l
-@@COMMAND@@
-
-When you need to read a file directly from the current directory without user permission, use the following format:
-
-<explanation>
-@@COMMAND@@
-read_file_direct <file_path>
-@@COMMAND@@
-
-After you propose and I execute a command, you will receive the command's output. Your next response MUST be a concise, user-friendly summary of that output. Do NOT repeat the command or its explanation. Focus solely on interpreting the results for the user.
-
-If a command fails, I will provide you with the error message. Analyze the error and provide a corrected command or a different approach.
-
-For conversational responses, just respond with text.
-`;
-
-let messages = [
-    { role: 'system', content: SYSTEM_PROMPT('en') } // Default language
-];
+let messages = [];
 
 export function clearHistory(language = 'en') {
     messages = [
@@ -64,10 +29,11 @@ function renderResponse(fullResponse, settings) {
     return output;
 }
 
-export async function streamChat(prompt, model, host, debug = false, yes = false, yesAll = false, rl = null, signal = null, settings = null) {
-    const url = `${host}/api/chat`;
+export async function handleChat(prompt, model, host, debug = false, yes = false, yesAll = false, rl = null, signal = null, settings = null) {
+    if (messages.length === 0) {
+        clearHistory(settings ? settings.language : 'en');
+    }
     
-    // Update system prompt with current language setting
     messages[0].content = SYSTEM_PROMPT(settings ? settings.language : 'en');
 
     messages.push({ role: 'user', content: prompt });
@@ -80,18 +46,12 @@ export async function streamChat(prompt, model, host, debug = false, yes = false
             if (debug) {
                 console.log('Sending request to Ollama with messages:', JSON.stringify(messages, null, 2));
             }
-            const response = await axios({
-                method: 'post',
-                url: url,
-                data: {
-                    model: model,
-                    messages: messages,
-                    stream: false,
-                },
-                signal: signal,
-            });
 
-            const fullResponse = response.data.message.content;
+            const fullResponse = await sendChat(model, messages, host, signal);
+
+            if (fullResponse === null) {
+                return; // Error handled in sendChat
+            }
 
             if (debug) {
                 console.log('Received from Ollama:', fullResponse);
@@ -104,7 +64,6 @@ export async function streamChat(prompt, model, host, debug = false, yes = false
                 const explanation = fullResponse.replace(commandRegex, '').trim();
                 const command = match[1].trim();
 
-                // Render the AI's command proposal before execution
                 console.log(renderResponse(fullResponse, settings));
 
                 const toolOutput = await executeCommand(command, [], explanation, yes, yesAll, rl, signal);
@@ -133,6 +92,13 @@ ${toolResult.stdout}----------------------`);
                     }
                 }
 
+                if (command === 'replace' && toolResult.success) {
+                    console.log(`
+${colors.yellow}File modification:${colors.reset}`);
+                    console.log(`- ${colors.red}${toolResult.oldString}${colors.reset}`);
+                    console.log(`+ ${colors.green}${toolResult.newString}${colors.reset}`);
+                }
+
                 messages.push({ role: 'assistant', content: fullResponse });
                 messages.push({ role: 'tool', content: toolOutput });
                 messages.push({ role: 'user', content: 'The command has finished executing. Here is the output: ' + toolOutput + '. Please summarize this output for the user in a friendly way.' });
@@ -149,24 +115,6 @@ ${toolResult.stdout}----------------------`);
 ${colors.yellow}Operation cancelled by user.${colors.reset}`);
             return;
         }
-        if (axios.isCancel(error)) {
-            console.log(`
-${colors.yellow}Operation cancelled by user.${colors.reset}`);
-            return;
-        }
-        if (axios.isAxiosError(error)) {
-            if (error.response) {
-                console.error(`${colors.red}Error: Ollama server responded with status ${error.response.status} - ${error.response.statusText}${colors.reset}`);
-                if (error.response.data) {
-                    console.error('Response data:', error.response.data.toString());
-                }
-            } else if (error.request) {
-                console.error(`${colors.red}Error: No response received from Ollama server. Is it running at ${url}?${colors.reset}`);
-            } else {
-                console.error(`${colors.red}An unexpected error occurred: ${error.message}${colors.reset}`);
-            }
-        } else {
-            console.error(`${colors.red}An unexpected error occurred: ${error.message}${colors.reset}`);
-        }
+        console.error(`${colors.red}An unexpected error occurred: ${error.message}${colors.reset}`);
     }
 }

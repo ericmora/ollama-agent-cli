@@ -110,7 +110,7 @@ npm install
     ```
 3.  Run the CLI:
     ```bash
-node index.js --interactive
+./bin/ollama-agent --interactive
     ```
 
 ## Contributing

@@ -8,7 +8,8 @@
     "ollama-agent": "./index.js"
   },
   "scripts": {
-    "test": "echo 'Error: no test specified' && exit 1"
+    "test": "echo 'Error: no test specified' && exit 1",
+    "servers": "bash run.sh"
   },
   "keywords": [
     "ollama",
@@ -25,11 +26,13 @@
     "dotenv": "^16.4.5"
   },
   "files": [
-    "index.js",
-    "lib/",
+    "bin/",
+    "src/",
     "logo.txt",
-    "package.json",
     "README.md",
+    ".env.example"
+  ]
+}ME.md",
     ".env.example"
   ]
 }

@@ -61,6 +61,23 @@ OLLAMA_MODEL="llama3"
 
 ## 6. Instalación
 
+El `package.json` incluirá una sección `bin` que mapea el comando `ollama-agent` al script `bin/ollama-agent`. Esto permitirá una instalación global y sencilla mediante:
+
+```bash
+npm install -g .
+```
+uración esencial:
+
+```
+# URL del servidor local de Ollama
+OLLAMA_HOST="http://localhost:11434"
+
+# Modelo a utilizar por defecto si no se especifica otro
+OLLAMA_MODEL="llama3"
+```
+
+## 6. Instalación
+
 El `package.json` incluirá una sección `bin` que mapea el comando `ollama-agent` al script `index.js`. Esto permitirá una instalación global y sencilla mediante:
 
 ```bash

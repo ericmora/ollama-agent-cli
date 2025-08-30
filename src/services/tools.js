@@ -112,7 +112,7 @@ async function replace(filePath, oldString, newString) {
         }
         const result = data.replace(oldString, newString);
         await fs.writeFile(filePath, result, 'utf8');
-        return JSON.stringify({ success: true, message: `Replaced string in ${filePath}` });
+        return JSON.stringify({ success: true, oldString, newString, message: `Replaced string in ${filePath}` });
     } catch (error) {
         return JSON.stringify({ error: error.message });
     }

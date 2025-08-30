@@ -1,0 +1,47 @@
+# docker-compose.yml
+# This file integrates Ollama and provides a placeholder for Bolt DIY.
+#
+# To use Bolt DIY, you will need to clone its repository and build its Docker image.
+# Replace the 'image: bolt-diy-image' with the actual image you build.
+
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "3003:11434"
+    volumes:
+      - ~/.ollama:/root/.ollama
+    networks:
+      - ai_network
+
+  bolt_diy:
+    build:
+      context: ../.files/bolt.diy
+      dockerfile: Dockerfile
+      target: bolt-ai-development
+    container_name: bolt_diy
+    ports:
+      - "2002:5173" # Default port for Bolt DIY
+    environment:
+      # This variable should configure Bolt DIY to use the Ollama service within Docker.
+      # Note: The exact variable name may differ; OLLAMA_API_BASE_URL is a common convention.
+      - OLLAMA_API_BASE_URL=http://ollama:11434
+      - NODE_ENV=development
+      - VITE_HMR_PROTOCOL=ws
+      - VITE_HMR_HOST=localhost
+      - VITE_HMR_PORT=5173
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - PORT=5173
+      - RUNNING_IN_DOCKER=true
+    networks:
+      - ai_network
+    # volumes:
+    #   - ./bolt_diy_app:/app # Uncomment if your Bolt DIY app needs to access local files
+
+networks:
+  ai_network:
+    driver: bridge

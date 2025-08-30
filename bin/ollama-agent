@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+import '../src/config.js';
+import { run } from '../src/cli.js';
+
+run();
